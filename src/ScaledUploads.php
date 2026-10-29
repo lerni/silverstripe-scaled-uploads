@@ -167,17 +167,10 @@ class ScaledUploads extends Extension
     {
         $backend = $file->getImageBackend();
 
-        // temporary location for image manipulation
+        // temporary location for the result only, the source is read from the asset store
         $tmp_image = TEMP_PATH . '/resampled-' . mt_rand(100000, 999999) . '.' . $file->getExtension();
 
-        $tmp_contents = $file->getString();
-
-        // write to tmp file
-        @file_put_contents($tmp_image, $tmp_contents);
-
-        $backend->loadFrom($tmp_image);
-
-        if ($backend->getImageResource()) {
+        if ($backend && $backend->getImageResource()) {
             $modified = false;
 
             // clone original
@@ -185,7 +178,7 @@ class ScaledUploads extends Extension
 
             // if rotation allowed & jPG, test to see if orientation needs switching
             if ($this->config_auto_rotate && preg_match('/jpe?g/i', $file->getExtension())) {
-                $switch_orientation = $this->exifRotation($tmp_image);
+                $switch_orientation = $this->exifRotation($file);
                 if ($switch_orientation) {
                     $modified = true;
 
@@ -227,6 +220,9 @@ class ScaledUploads extends Extension
                 $file->setFromLocalFile($tmp_image, $file->FileName); // set new image
                 $file->write();
             }
+
+            // the file may have changed, let the backend reload it from the asset store
+            $backend->setImageResource(null);
         }
 
         @unlink($tmp_image); // delete tmp file
@@ -235,7 +231,7 @@ class ScaledUploads extends Extension
     /**
      * ExifRotation - return the exif rotation
      *
-     * @param mixed $file Physical file path
+     * @param \SilverStripe\Assets\File $file File
      *
      * @return int bool
      */
@@ -245,7 +241,14 @@ class ScaledUploads extends Extension
             return false;
         }
 
-        $exif = @exif_read_data($file);
+        // exif_read_data() needs a seekable stream
+        $stream = fopen('php://temp', 'r+');
+        fwrite($stream, (string) $file->getString());
+        rewind($stream);
+
+        $exif = @exif_read_data($stream);
+
+        fclose($stream);
 
         if (!$exif) {
             return false;
