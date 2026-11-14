@@ -221,7 +221,9 @@ class ScaledUploads extends Extension
                 $file->write();
             }
 
-            // the file may have changed, let the backend reload it from the asset store
+            // the file may have changed, let the backend reload it from the asset store;
+            // also frees the decoded bitmap and covers silverstripe/assets versions without
+            // https://github.com/silverstripe/silverstripe-assets/pull/725
             $backend->setImageResource(null);
         }
 
